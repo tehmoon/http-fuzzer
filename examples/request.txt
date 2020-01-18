@@ -1,0 +1,2 @@
+{{ "GET" }} /{{ .Word | urlquery }} HTTP/1.1
+
