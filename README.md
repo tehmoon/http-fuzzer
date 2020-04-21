@@ -72,7 +72,106 @@ Usage of ./http-fuzzer:
 pflag: help requested
 ```
 
-### Throttling
+### Go-routines and Throttling
+
+The flags `-r` and `--throttle-duration` are used to control concurrent requests and throtteling.
+
+By default, it uses the number of CPUs available for concurrency and no throtteling, which means that if you have 12 CPUs, you'll have a maxium of 12 processing requests at a time. Since there is not throtteling, requests will be spooled as fast as possible.
+
+When throtteling is set, let's say to 100ms. It means that there is going to be a 100ms delay before spooling the next request. As an example, if you have `-r 3 --throttle-duration 100ms` and each request takes 500ms it means that:
+
+```
+0ms 1 request
+100ms 2 requests
+200ms 3 requests
+300ms 3 requests
+400ms 3 requests
+500ms first request is done, 4th request is spooled
+600ms second request is done, 5th request is spooled
+700ms third request is done, 6th request is spooled
+```
+
+As you can see `-r 3 --throttle-duration` means, not more than 3 concurrent requests and at most 1 request every 100ms.
+
+It is really helpful if you want to be stealthy and/or don't want to DOS the server.
+
 ### Template
+
+This project is based on using the [go template](https://godoc.org/text). When you set the template file path with `-f`, http-fuzzer will render the template and parse the http request to make sure it is valid.
+
+The request should look like this:
+```
+HTTP_VERB URI HTTP/1.1
+Header: value
+Header: value
+...
+
+Body
+```
+
+```
+GET {{ .Word | urlquery }}
+
+```
+
+Notice how you have to have an empty line between the end of the headers and the body. If you don't have any body, you still have to have that empty line.
+
+As for the template, you have two placeholders:
+  - `{{ .Word }}` which is the word in the `-w` flag
+  - `{{ .Ext }}` which is the word in the `--ext-word` flag
+
+List of functions:
+  - Go [text/template](https://godoc.org/text/template#hdr-Functions) package
+  - [Sprig](http://masterminds.github.io/sprig/) functions
+
+Use the `urlquery` function in the URI section so you don't have any parsing problem.
+
+When using `--use-random-user-agent`, the `User-Agent` header will be overwritten automatically from the template.
+
 ### Ext list
+
+When specifying ext words, the number of total requests are multiplied by the number of ext words. It is useful if you want to fuzz multiple values for one word:
+
+Wordlist:
+  - a
+  - b
+  - c
+  - d
+
+Ext words:
+  - 1
+  - 2
+
+Output:
+  - a 1
+  - a 2
+  - b 1
+  - b 2
+  - c 1
+  - c 2
+  - d 1
+  - d 2
+
+For example if you want to fuzz the http verb for each words:
+```
+{{ .Ext | upper }} {{ .Word | urlquery }} HTTP/1.1
+
+
+```
+
+`-w raft-medium-directories.txt --ext-word get --ext-word put --ext-word post`
+
 ### Filtering
+
+Filtering is similar to the `wfuzz` projects. Most of the flags have been replicated for ease of use.
+
+The engine will analyze the response header and body in each thread (go routine) and send the result to a single thread that will decide to output the result or not.
+
+If you don't specify the `-o` flag, a temporary directory will be used so you don't loose your work.
+
+TODO:
+  - finish doc
+  - fix offset and ext word
+The directory where requests are saved is using this hierarchy:
+  - `<output_dir>/<
+  - `<offset>` 
